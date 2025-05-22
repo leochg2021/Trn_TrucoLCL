@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Torneio de Truco</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f8ff;
+      padding: 20px;
+      font-size: 15px;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    input, button, select {
+      font-size: 15px;
+      padding: 5px;
+      margin: 5px;
+    }
+    .team-list, .matches, .ranking {
+      width: 80%;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 15px;
+      background-color: #e0ffe0;
+    }
+    .team-list ul li {
+      margin-bottom: 20px;
+    }
+    .match {
+      display: flex;
+      justify-content: space-between;
+      background-color: #ffe0e0;
+      margin: 20px 0;
+      padding: 20px;
+      border-radius: 8px;
+      flex-wrap: wrap;
+      line-height: 2em;
+    }
+    .ranking-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .ranking-table th, .ranking-table td {
+      border: 1px solid #000;
+      padding: 8px;
+      text-align: center;
+    }
+    .btn {
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background-color: #0056b3;
+    }
+    .classificado {
+      font-weight: bold;
+      background-color: #ccffcc;
+    }
+    .team-name {
+      font-weight: bold;
+    }
+    .placar-input {
+      width: 50px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Torneio de Truco - Leonel/Cloudbyte</h1>
+    <div>
+      <input type="text" id="teamName" placeholder="Nome da Equipe">
+      <input type="number" id="regionNumber" placeholder="Nº Região (opcional)">
+      <button class="btn" onclick="addTeam()">Adicionar Equipe</button>
+      <button class="btn" onclick="clearTeams()">Limpar Equipes</button>
+    </div>
+
+    <div class="team-list" id="teamList">
+      <h2>Equipes</h2>
+      <ul id="teams"></ul>
+    </div>
+
+    <div>
+      <input type="number" id="numRodadas" placeholder="Número de Rodadas">
+      <button class="btn" onclick="generateRounds()">Gerar Confrontos</button>
+      <button class="btn" onclick="clearConfrontos()">Limpar Confrontos</button>
+    </div>
+
+    <div class="matches" id="matches">
+      <h2>Confrontos</h2>
+      <div id="matchContainer"></div>
+    </div>
+
+    <div class="ranking" id="ranking">
+      <h2>Classificação</h2>
+      <label for="numClassificados">Nº de Classificados:</label>
+      <input type="number" id="numClassificados" placeholder="Ex: 4" oninput="calcularClassificacao()">
+      <table class="ranking-table" id="rankingTable">
+        <thead>
+          <tr>
+            <th>Classificação</th>
+            <th>Equipe</th>
+            <th>Vitórias</th>
+            <th>Pontos</th>
+            <th>Saldo</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button class="btn" onclick="generatePDF()">Gerar Relatório PDF</button>
+      <button class="btn" onclick="zerarResultados()">Zerar Resultados</button>
+    </div>
+  </div>
+
+  <script>
+    let teams = JSON.parse(localStorage.getItem('teams')) || [];
+    let teamIdCounter = teams.length > 0 ? Math.max(...teams.map(t => t.id)) + 1 : 1;
+    const resultadosLancados = {};
+
+    function addTeam() {
+      const name = document.getElementById("teamName").value.trim();
+      const region = document.getElementById("regionNumber").value.trim();
+      if (!name) return alert("Digite o nome da equipe.");
+      teams.push({ id: teamIdCounter++, name, region, victories: 0, points: 0, saldo: 0 });
+      updateTeamList();
+      salvarLocalmente();
+      document.getElementById("teamName").value = "";
+      document.getElementById("regionNumber").value = "";
+    }
+
+    function updateTeamList() {
+      const ul = document.getElementById("teams");
+      ul.innerHTML = "";
+      teams.forEach(team => {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="team-name">${team.id} - ${team.name}</span>${team.region ? ' (Região: ' + team.region + ')' : ''}`;
+        ul.appendChild(li);
+      });
+    }
+
+    function clearTeams() {
+      if (confirm("Tem certeza que deseja apagar todas as equipes?")) {
+        teams.length = 0;
+        teamIdCounter = 1;
+        updateTeamList();
+        salvarLocalmente();
+      }
+    }
+
+    function salvarLocalmente() {
+      localStorage.setItem('teams', JSON.stringify(teams));
+    }
+
+    function generateRounds() {
+      if (teams.length < 2) return alert("Cadastre pelo menos duas equipes.");
+
+      const numRodadas = parseInt(document.getElementById("numRodadas").value);
+      if (isNaN(numRodadas) || numRodadas <= 0) return alert("Informe o número de rodadas válido.");
+
+      const allowSameRegion = confirm("Deseja permitir confrontos entre equipes da mesma região?");
+      const rounds = [];
+      const historico = new Set();
+
+      for (let r = 0; r < numRodadas; r++) {
+        const disponiveis = [...teams];
+        const rodada = [];
+
+        while (disponiveis.length > 1) {
+          const a = disponiveis.shift();
+          let idx = disponiveis.findIndex(b => {
+            const chave = `${a.id}-${b.id}`;
+            const chaveInv = `${b.id}-${a.id}`;
+            const mesmoGrupo = a.region && b.region && a.region === b.region;
+            return !historico.has(chave) && !historico.has(chaveInv) && (allowSameRegion || !mesmoGrupo);
+          });
+
+          if (idx === -1) {
+            disponiveis.push(a);
+            if (disponiveis.length === 1) break;
+            continue;
+          }
+
+          const b = disponiveis.splice(idx, 1)[0];
+          rodada.push({ a, b });
+          historico.add(`${a.id}-${b.id}`);
+        }
+
+        if (rodada.length > 0) rounds.push(rodada);
+      }
+
+      renderizarConfrontos(rounds);
+    }
+
+    function renderizarConfrontos(rounds) {
+      const container = document.getElementById("matchContainer");
+      container.innerHTML = "";
+      rounds.forEach((rodada, i) => {
+        const div = document.createElement("div");
+        div.innerHTML = `<h3>Rodada ${i + 1}</h3>`;
+        rodada.forEach((match, idx) => {
+          const matchDiv = document.createElement("div");
+          matchDiv.className = "match";
+          matchDiv.innerHTML = `
+            <div>
+              <strong>${match.a.id} - ${match.a.name}</strong>
+              <input type="number" class="placar-input" id="placar-${i}-${idx}-a" placeholder="Pts">
+            </div>
+            <div>
+              <strong>${match.b.id} - ${match.b.name}</strong>
+              <input type="number" class="placar-input" id="placar-${i}-${idx}-b" placeholder="Pts">
+            </div>
+            <button class="btn" onclick="lancarResultado(${match.a.id}, ${match.b.id}, 'placar-${i}-${idx}-a', 'placar-${i}-${idx}-b')">Lançar</button>
+          `;
+          div.appendChild(matchDiv);
+        });
+        container.appendChild(div);
+      });
+    }
+
+    function lancarResultado(idA, idB, inputAId, inputBId) {
+      const pontosA = parseInt(document.getElementById(inputAId).value);
+      const pontosB = parseInt(document.getElementById(inputBId).value);
+      if (isNaN(pontosA) || isNaN(pontosB)) return alert("Informe os pontos de ambas equipes.");
+      if (pontosA === pontosB) return alert("Empates não são permitidos.");
+
+      const equipeA = teams.find(t => t.id === idA);
+      const equipeB = teams.find(t => t.id === idB);
+      if (!equipeA || !equipeB) return;
+
+      const chave = `${idA}-${idB}`;
+      const chaveInv = `${idB}-${idA}`;
+      const chaveFinal = resultadosLancados[chave] ? chave : (resultadosLancados[chaveInv] ? chaveInv : chave);
+
+      const anterior = resultadosLancados[chaveFinal];
+      if (anterior) {
+        if (prompt("Já existe resultado lançado. Digite a senha para alterar:") !== "080276") {
+          return alert("Senha incorreta. Alteração não permitida.");
+        }
+        const { pontosA: pa, pontosB: pb } = anterior;
+        equipeA.points -= pa;
+        equipeB.points -= pb;
+        equipeA.saldo -= (pa - pb);
+        equipeB.saldo -= (pb - pa);
+        if (pa === 24) equipeA.victories--;
+        if (pb === 24) equipeB.victories--;
+      }
+
+      equipeA.points += pontosA;
+      equipeB.points += pontosB;
+      equipeA.saldo += (pontosA - pontosB);
+      equipeB.saldo += (pontosB - pontosA);
+      if (pontosA === 24) equipeA.victories++;
+      if (pontosB === 24) equipeB.victories++;
+
+      resultadosLancados[chaveFinal] = { pontosA, pontosB };
+      salvarLocalmente();
+      calcularClassificacao();
+      alert("Resultado lançado com sucesso!");
+    }
+
+    function calcularClassificacao() {
+      const num = parseInt(document.getElementById("numClassificados").value);
+      const tbody = document.querySelector("#rankingTable tbody");
+      tbody.innerHTML = "";
+      const ranking = [...teams].sort((a, b) => b.victories - a.victories || b.points - a.points || b.saldo - a.saldo);
+      ranking.forEach((t, i) => {
+        const tr = document.createElement("tr");
+        if (!isNaN(num) && i < num) tr.classList.add("classificado");
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td><strong>${t.id}</strong> - ${t.name}</td>
+          <td>${t.victories}</td>
+          <td>${t.points}</td>
+          <td>${t.saldo}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function clearConfrontos() {
+      document.getElementById("matchContainer").innerHTML = "";
+    }
+
+    function zerarResultados() {
+      if (prompt("Digite a senha para zerar os resultados:") === "080276") {
+        teams.forEach(t => {
+          t.victories = 0;
+          t.points = 0;
+          t.saldo = 0;
+        });
+        Object.keys(resultadosLancados).forEach(k => delete resultadosLancados[k]);
+        salvarLocalmente();
+        calcularClassificacao();
+        alert("Resultados zerados.");
+      } else {
+        alert("Senha incorreta.");
+      }
+    }
+
+    function generatePDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.setFontSize(14);
+      doc.text("Classificação do Torneio de Truco", 20, 20);
+      const headers = [["Classificação", "Equipe", "Vitórias", "Pontos", "Saldo"]];
+      const rows = [...teams]
+        .sort((a, b) => b.victories - a.victories || b.points - a.points || b.saldo - a.saldo)
+        .map((t, i) => [i + 1, `${t.id} - ${t.name}`, t.victories, t.points, t.saldo]);
+      doc.autoTable({ startY: 30, head: headers, body: rows });
+      doc.save("classificacao_truco.pdf");
+    }
+
+    window.onload = () => {
+      updateTeamList();
+      calcularClassificacao();
+    };
+  </script>
+</body>
+</html>
