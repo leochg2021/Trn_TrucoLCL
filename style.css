@@ -1,0 +1,70 @@
+body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f8ff;
+      padding: 20px;
+      font-size: 15px;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    input, button, select {
+      font-size: 15px;
+      padding: 5px;
+      margin: 5px;
+    }
+    .team-list, .matches, .ranking {
+      width: 80%;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 15px;
+      background-color: #e0ffe0;
+    }
+    .team-list ul li {
+      margin-bottom: 20px;
+    }
+    .match {
+      display: flex;
+      justify-content: space-between;
+      background-color: #ffe0e0;
+      margin: 20px 0;
+      padding: 20px;
+      border-radius: 8px;
+      flex-wrap: wrap;
+      line-height: 2em;
+    }
+    .ranking-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .ranking-table th, .ranking-table td {
+      border: 1px solid #000;
+      padding: 8px;
+      text-align: center;
+    }
+    .btn {
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background-color: #0056b3;
+    }
+    .classificado {
+      font-weight: bold;
+      background-color: #ccffcc;
+    }
+    .team-name {
+      font-weight: bold;
+    }
+    .placar-input {
+      width: 50px;
+    }
+  
